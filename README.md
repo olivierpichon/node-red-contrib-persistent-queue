@@ -1,10 +1,15 @@
-# node-red-contrib-msg-queue
+# node-red-contrib-persistent-queue
 
 A contributed Node-RED node, that queues undeliverable messages to file for later delivery.
 
 This node is most valuable for Node-RED installations that have unreliable network connectivity.
 Messages that can't be delivered, are instead queued on disk until communications are again
 restored. 
+
+This is a fork from [node-red-contrib-msg-queue](https://github.com/damoclark/node-red-contrib-msg-queue). It fixes
+[some issues](https://github.com/damoclark/node-red-contrib-msg-queue/issues/1) and implement file size limit for 
+the DB file. When this limit is reached, the new messages will be forwarded to the next node even if the Internet 
+connectivity is lost, preventing the disk from being filled up.
 
 ## Overview
 If an outbound Node-Red node, such as an MQTT node goes offline, subsequent messages are
