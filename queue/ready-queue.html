@@ -75,9 +75,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		shared between multiple queue nodes.</p>
 
 		<p>Optionally, you can setup a max DB file size in (MB). The DB file will then be monitored not to go beyond
-		this value. When this value is reached, the new messages will be forwarded to the next node, preventing the disk
-		from being filled up. If the node is started with a DB file size already greater than the limit, the
-		flow is stopped.
+		this value. When this value is reached, the new messages will be discarded, preventing the disk
+		from being filled up. Once all the queue of old messages is processed, the DB size is vaccumed automatically.
 		</p>
 </script>
 

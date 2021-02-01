@@ -156,7 +156,6 @@ module.exports = function (RED) {
 		// On node close, close the queue
 		node.on('close', function (done) {
 			isNodeClosing = true;
-			disconnected();
 
 			if(statusTimer) {
 				clearInterval(statusTimer) ;
@@ -166,6 +165,10 @@ module.exports = function (RED) {
 			if(fileSizeTimer) {
 				clearInterval(fileSizeTimer) ;
 				statusTimer = null ;
+			}
+
+			if(queue.isStarted()) {
+				queue.stop() ;
 			}
 
 			if(queue.isOpen()) {
@@ -215,38 +218,22 @@ module.exports = function (RED) {
 
 		/**
 		 * Check if the DB file Size is greater than a provided value
-		 * if it is, close the node and update the status
+		 * if it is, stop processing new messages, process only the old until the queue is back to empty
 		 */
 		function checkDBSize() {
 			return isAboveDBFileSizeLimit().then(function(aboveDBFileSizeLimit) {
-				if (aboveDBFileSizeLimit)	{
-					maxDBFileSizeReached = true;
-					disconnected()
-
-					if(statusTimer) {
-						clearInterval(statusTimer) ;
-						statusTimer = null ;
-					}
-
-					if(fileSizeTimer) {
-						clearInterval(fileSizeTimer) ;
-						statusTimer = null ;
-					}
-				}
+				maxDBFileSizeReached = aboveDBFileSizeLimit;
 			})
 		}
 
 		/**
 		 * Start/stop checking the DB size
 		 *
-		 * If downstream node is disconnected or its connected but the queue isnt empty
-		 * then we will check if the DB size does not reach the provided value
-		 *
 		 * Otherwise, we stop updating our status (as the number of msgs wont change)
 		 */
 		function setFileSizeTimer() {
-			if (isNodeClosing || maxDBFileSizeReached) { return; }
-			if ((node.maxDBFileSize) && (!isConnected || (isConnected && !queue.isEmpty()))) {
+			if (isNodeClosing) { return; }
+			if (node.maxDBFileSize) {
 				if(!fileSizeTimer)
 					fileSizeTimer = setInterval(checkDBSize,10000) ;
 			} else if(fileSizeTimer) {
@@ -265,8 +252,8 @@ module.exports = function (RED) {
 		 * Otherwise, we stop updating our status (as the number of msgs wont change)
 		 */
 		function setStatusTimer() {
-			if (isNodeClosing || maxDBFileSizeReached) { return; }
-			if(!isConnected || (isConnected && !queue.isEmpty())) {
+			if (isNodeClosing) { return; }
+			if (!isConnected || (isConnected && (!queue.isEmpty() || maxDBFileSizeReached))) {
 				if(!statusTimer)
 					statusTimer = setInterval(statusOutput,500) ;
 			} else if(statusTimer) {
@@ -293,7 +280,7 @@ module.exports = function (RED) {
 
 			if (maxDBFileSizeReached) {
 				s = {
-					fill:"red", shape:"ring", text:"Max DB Size Reached"
+					fill:"red", shape:"ring", text:"MaxDB Size Reached" + remaining
 				} ;
 			}
 			else if(!queue.isEmpty() && isConnected) {
@@ -413,11 +400,8 @@ module.exports = function (RED) {
 		.then(isAboveDBFileSizeLimit)
 		.then(function(aboveDBFileSizeLimit) {
 			if (aboveDBFileSizeLimit) {
-				// Generate error if DB file is above file size limit
 				maxDBFileSizeReached = true;
 				statusOutput();
-				queue.close()
-				throw new Error("The DB file is above the file size limit");
 			}
 		})
 		.catch(function(err) {
@@ -446,6 +430,8 @@ module.exports = function (RED) {
 
 			// Once the queue has been opened, we can start listening for input from node-red
 			node.on('input', function (msg) {
+				// do not process new data or status if we are closing the Node
+				if (isNodeClosing) { return; }
 
 				// status message
 				if (msg.hasOwnProperty('status')) {
@@ -453,8 +439,12 @@ module.exports = function (RED) {
 					return ;
 				}
 
+				// do not process new messages if we reach the maxDBFileSize; this gives a chance for the system to recover:
+				// processing old messages, discarding the new until the queue is back to empty
+				if (maxDBFileSizeReached) { return; }
+
 				// upstream message to send on
-				if(maxDBFileSizeReached || (isConnected && queue.isEmpty())) {
+				if(isConnected && queue.isEmpty()) {
 					node.send(msg);
 				} else {
 					queue.add(msg) ;
