@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-persistent-queue",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A contributed Node-RED node, that queues undeliverable messages to file for later delivery.",
   "keywords": [
     "node-red",
